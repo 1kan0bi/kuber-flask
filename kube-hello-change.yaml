@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-flask-change-service
+  namespace: mindbox-flask
+spec:
+  selector:
+    app: hello-python
+  ports:
+  - protocol: "TCP"
+    port: 8080
+    targetPort: 8080
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-python
+  namespace: mindbox-flask
+spec:
+  selector:
+    matchLabels:
+      app: hello-python
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: hello-python
+    spec:
+      containers:
+      - name: flask-change
+        image: cr.yandex/crpb8m9i2ddgldi2ahpf/flask-change:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        resources:               
+          limits:
+            cpu: "0.1"           
+            memory: "128Mi"      
+          requests:
+            cpu: "0.1"
+            memory: "128Mi"      
+        args:
+        - -cpus                  
+        - "1"
+        livenessProbe:           
+          httpGet:
+            path: /              
+            port: 8080
+          httpHeaders:
+          - name: Custom-Header
+            value: Awesome
+          initialDelaySeconds: 20 
+          periodSeconds: 5
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - hello-python
+            topologyKey: "topology.kubernetes.io/zone"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-example
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hello-python
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 10
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: AverageValue
+          averageValue: 128Mi
